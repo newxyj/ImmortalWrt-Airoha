@@ -1,0 +1,31 @@
+#!/bin/sh
+# 首次启动：唯一主机名、root 密码、面板强制改密、渲染播放列表
+
+# 1) 主机名 iptv + MAC 后 6 位
+MAC=$(cat /sys/class/net/eth0/address 2>/dev/null | tr -d ':')
+if [ -n "$MAC" ]; then
+	HN="iptv${MAC#??????}"
+	uci set system.@system[0].hostname="$HN" 2>/dev/null
+	uci commit system 2>/dev/null
+fi
+
+# 2) root 密码统一为 dx13579@
+ROOT_HASH='$5$ZuKnmtAcsFcQIZRD$IpGGruufAIyi5Y7uRjSarfrrpam3sHFsjjTSWPJbKHC'
+if [ -L /etc/shadow ]; then
+	rm -f /etc/shadow
+	[ -f /rom/etc/shadow ] && cp /rom/etc/shadow /etc/shadow
+fi
+if [ -f /etc/shadow ]; then
+	awk -v h="$ROOT_HASH" 'BEGIN{FS=OFS=":"} $1=="root"{$2=h} {print}' /etc/shadow > /tmp/shadow.new 2>/dev/null
+	[ -s /tmp/shadow.new ] && cat /tmp/shadow.new > /etc/shadow
+	chmod 600 /etc/shadow
+fi
+
+# 3) 面板首次登录强制改密
+touch /etc/panel/.must-change
+
+# 4) 服务与播放列表
+/etc/init.d/rtp2httpd enable 2>/dev/null
+/usr/bin/playlist-render 2>/dev/null
+
+exit 0

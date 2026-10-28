@@ -1,0 +1,15 @@
+#!/bin/sh
+# 设置 IPTV 面板登录密码
+# 用法：panel-passwd 新密码
+
+[ -n "$1" ] || { echo "usage: panel-passwd <new-password>"; exit 1; }
+
+SALT=$(cat /proc/sys/kernel/random/uuid | cut -c1-8)
+HASH=$(printf '%s%s' "$SALT" "$1" | sha256sum | cut -d' ' -f1)
+
+mkdir -p /etc/panel
+printf 'sha256$%s$%s\n' "$SALT" "$HASH" > /etc/panel/passwd
+chmod 600 /etc/panel/passwd
+rm -f /etc/panel/.must-change
+
+echo "panel password updated"

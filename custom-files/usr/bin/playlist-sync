@@ -1,0 +1,38 @@
+#!/bin/sh
+# 播放列表同步：把 /www/playlist.txt 按端口拆成三份 m3u，然后重启 rtp2httpd
+IN=/www/playlist.txt
+[ -f "$IN" ] || exit 0
+
+i=1
+for PORT in 5000 5001 5002; do
+	OUT="/etc/rtp2httpd/playlist$i.m3u"
+	echo "#EXTM3U" > "$OUT"
+	GRP=""
+	while IFS= read -r line; do
+		case "$line" in
+			*'#genre#'*)
+				GRP=$(printf '%s' "$line" | sed 's/,#genre#.*//')
+				continue
+				;;
+		esac
+		case "$line" in
+			*"/udp/"*":$PORT/"*)
+				NAME=$(printf '%s' "$line" | cut -d, -f1)
+				URL=$(printf '%s' "$line" | cut -d, -f2-)
+				ADDR=$(printf '%s' "$URL" | sed -n "s|.*:$PORT/udp/\([0-9.]*\):\([0-9]*\).*|\1:\2|p")
+				if [ -n "$ADDR" ]; then
+					if [ -n "$GRP" ]; then
+						printf '#EXTINF:-1 group-title="%s",%s\n' "$GRP" "$NAME" >> "$OUT"
+					else
+						printf '#EXTINF:-1,%s\n' "$NAME" >> "$OUT"
+					fi
+					printf 'udp://%s\n' "$ADDR" >> "$OUT"
+				fi
+				;;
+		esac
+	done < "$IN"
+	i=$((i + 1))
+done
+
+/etc/init.d/rtp2httpd restart >/dev/null 2>&1
+exit 0

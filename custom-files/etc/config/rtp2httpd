@@ -1,0 +1,8 @@
+config instance 'line1'
+	option enabled '1'
+	list listen '0.0.0.0:5000'
+	list listen '[::]:5000'
+	option upstream_interface 'br-iptv.1'
+	option workers '4'
+	option external_m3u 'file:///etc/rtp2httpd/playlist1.m3u'
+	option external_m3u_update_interval '0'

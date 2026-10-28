@@ -1,0 +1,959 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IPTV 管理面板</title>
+<style>
+:root {
+	--bg: #0b1020;
+	--side: #0e1526;
+	--card: #141c2f;
+	--card2: #18213a;
+	--line: #22304d;
+	--text: #e8eeff;
+	--muted: #8ea2c6;
+	--acc: #3b82f6;
+	--ok: #41d392;
+	--bad: #ff6b6b;
+	--warn: #f5a524;
+}
+
+* { box-sizing: border-box; }
+
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--text);
+	font: 14px/1.5 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+
+.app { display: flex; min-height: 100vh; }
+
+/* 侧栏 */
+.side {
+	width: 196px;
+	flex: 0 0 196px;
+	background: var(--side);
+	border-right: 1px solid var(--line);
+	padding: 18px 12px;
+	display: flex;
+	flex-direction: column;
+}
+
+.brand {
+	font-size: 16px;
+	font-weight: 700;
+	letter-spacing: .5px;
+	margin: 4px 8px 22px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.brand .dot {
+	width: 10px; height: 10px; border-radius: 50%;
+	background: var(--acc);
+	box-shadow: 0 0 10px var(--acc);
+}
+
+#nav { display: flex; flex-direction: column; gap: 4px; }
+
+#nav button {
+	text-align: left;
+	background: transparent;
+	border: 0;
+	color: var(--muted);
+	padding: 10px 12px;
+	border-radius: 8px;
+	cursor: pointer;
+	font-size: 14px;
+}
+
+#nav button:hover { background: #16203a; color: var(--text); }
+#nav button.on { background: var(--acc); color: #fff; font-weight: 600; }
+
+.side-foot {
+	margin-top: auto;
+	padding: 10px 8px;
+	color: var(--muted);
+	font-size: 12px;
+	border-top: 1px solid var(--line);
+}
+
+/* 主区 */
+main { flex: 1; min-width: 0; padding: 18px 22px 40px; }
+
+.top {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 16px;
+}
+
+.top h1 { font-size: 22px; margin: 0; font-weight: 700; }
+.top-right { display: flex; align-items: center; gap: 10px; }
+
+.pill {
+	background: #16203a;
+	border: 1px solid var(--line);
+	color: var(--muted);
+	padding: 5px 12px;
+	border-radius: 999px;
+	font-size: 12px;
+}
+
+.pill.ok { color: var(--ok); border-color: #1f4d3a; }
+.pill.warn { color: var(--warn); border-color: #4d3d1f; }
+
+button.ghost {
+	background: #16203a;
+	color: var(--text);
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	padding: 7px 14px;
+	cursor: pointer;
+}
+
+button.ghost:hover { background: #1b2744; }
+
+/* 卡片 */
+.cards {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+	gap: 12px;
+	margin-bottom: 14px;
+}
+
+.card {
+	background: var(--card);
+	border: 1px solid var(--line);
+	border-radius: 12px;
+	padding: 14px 16px;
+}
+
+.card .k { color: var(--muted); font-size: 12px; }
+.card .v { font-size: 24px; font-weight: 700; margin-top: 6px; }
+
+/* 面板 */
+.panel {
+	background: var(--card);
+	border: 1px solid var(--line);
+	border-radius: 12px;
+	padding: 16px;
+	margin-bottom: 14px;
+}
+
+.panel h2 {
+	font-size: 16px;
+	margin: 0 0 10px;
+	padding: 8px 12px;
+	background: #1a2540;
+	border: 1px solid #2b3a58;
+	border-radius: 8px;
+}
+
+.desc { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
+code { background: #0a0f1c; padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+
+.lines { display: flex; flex-direction: column; gap: 8px; }
+
+.line-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	background: var(--card2);
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	padding: 12px 14px;
+}
+
+.line-item .l { display: flex; align-items: center; gap: 10px; }
+.line-item .st { font-size: 12px; }
+.line-item .st.ok { color: var(--ok); }
+.line-item .st.bad { color: var(--bad); }
+
+.kv { display: grid; grid-template-columns: 120px 1fr; gap: 8px 12px; }
+.kv .k { color: var(--muted); font-size: 12px; }
+.kv .v { font-size: 14px; }
+
+/* 分段控件 */
+.seg {
+	display: inline-flex;
+	background: #0f1729;
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	padding: 3px;
+	gap: 3px;
+	margin: 4px 0 14px;
+}
+
+.seg button {
+	background: transparent;
+	border: 0;
+	color: var(--muted);
+	padding: 8px 18px;
+	border-radius: 8px;
+	cursor: pointer;
+	font-size: 14px;
+}
+
+.seg button.on { background: var(--acc); color: #fff; font-weight: 600; }
+
+/* 表单 */
+.field { margin: 10px 0; }
+.field label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 5px; }
+
+.field input {
+	width: 100%;
+	max-width: 420px;
+	background: #0a0f1c;
+	color: var(--text);
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	padding: 9px 11px;
+	font-size: 14px;
+	outline: none;
+}
+
+.field input:focus { border-color: var(--acc); }
+
+.primary {
+	background: var(--acc);
+	color: #fff;
+	border: 0;
+	border-radius: 9px;
+	padding: 10px 18px;
+	font-size: 14px;
+	font-weight: 600;
+	cursor: pointer;
+	margin-top: 6px;
+}
+
+.primary:hover { background: #2f74e8; }
+.primary:active { transform: translateY(1px); }
+.primary[disabled] { opacity: .6; cursor: default; }
+
+textarea {
+	width: 100%;
+	height: 52vh;
+	background: #0a0f1c;
+	color: var(--text);
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	padding: 10px 12px;
+	font-family: ui-monospace, Consolas, monospace;
+	font-size: 12px;
+	line-height: 1.6;
+	white-space: pre;
+	overflow: auto;
+	resize: vertical;
+	outline: none;
+}
+
+textarea:focus { border-color: var(--acc); }
+
+.row { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.hint { color: var(--muted); font-size: 12px; }
+
+/* 视图切换 */
+.view { display: none; }
+.view.on { display: block; }
+
+/* toast */
+.toast {
+	position: fixed;
+	right: 20px;
+	bottom: 20px;
+	background: #16203a;
+	border: 1px solid var(--line);
+	color: var(--text);
+	padding: 12px 16px;
+	border-radius: 10px;
+	font-size: 13px;
+	opacity: 0;
+	transform: translateY(8px);
+	transition: .2s;
+	pointer-events: none;
+	max-width: 320px;
+}
+
+.toast.on { opacity: 1; transform: translateY(0); }
+.toast.ok { border-color: #1f4d3a; }
+.toast.bad { border-color: #5a2626; }
+
+@media (max-width: 760px) {
+	.app { flex-direction: column; }
+	.side { width: auto; flex: none; }
+	#nav { flex-direction: row; overflow-x: auto; }
+	.side-foot { display: none; }
+	main { padding: 14px; }
+}
+
+/* 登录 */
+.login{position:fixed;inset:0;background:rgba(5,9,18,.94);display:flex;align-items:center;justify-content:center;z-index:50}
+.login.hide{display:none}
+.login-box{width:320px;max-width:88vw;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.login-box .brand{font-size:18px;margin:0 0 6px;justify-content:center}
+.login-box .desc{text-align:center}
+.login-box input{width:100%;background:#0a0f1c;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:14px;outline:none;margin-bottom:12px}
+.login-box input:focus{border-color:var(--acc)}
+.login-box .primary{width:100%}
+.login-err{color:var(--bad);font-size:12px;min-height:16px;margin-top:8px;text-align:center}
+.logout{background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:8px;padding:6px 10px;margin-top:8px;cursor:pointer;font-size:12px;width:100%}
+.logout:hover{color:var(--text);border-color:var(--acc)}
+
+/* 登录页（仿源机） */
+.login{position:fixed;inset:0;background:radial-gradient(circle at 50% 18%, #14213c 0%, #070b14 62%);display:flex;align-items:center;justify-content:center;z-index:50}
+.login.hide{display:none}
+.login-box{width:380px;max-width:90vw;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:28px 28px 22px;box-shadow:0 24px 70px rgba(0,0,0,.55)}
+.login-logo{width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,#3b82f6,#6366f1);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;box-shadow:0 8px 24px rgba(59,130,246,.35)}
+.login-title{font-size:20px;font-weight:700;text-align:center;margin:0 0 6px;color:#fff}
+.login-sub{text-align:center;color:var(--muted);font-size:12px;margin:0 0 18px}
+.login-label{display:block;font-size:12px;color:var(--muted);margin:12px 0 6px}
+.login-box input{width:100%;background:#0a0f1c;color:var(--text);border:1px solid var(--line);border-radius:9px;padding:11px 12px;font-size:14px;outline:none}
+.login-box input:focus{border-color:var(--acc)}
+.login-box .primary{width:100%;margin-top:20px;padding:11px 18px}
+.login-err{color:var(--bad);font-size:12px;min-height:16px;margin-top:10px;text-align:center}
+.login-forgot{text-align:center;color:var(--muted);font-size:12px;margin-top:12px;cursor:pointer}
+.login-forgot:hover{color:var(--acc)}
+.logout{background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:8px;padding:6px 10px;margin-top:8px;cursor:pointer;font-size:12px;width:100%}
+.logout:hover{color:var(--text);border-color:var(--acc)}
+
+/* 侧栏图标 */
+#nav button{display:flex;align-items:center;gap:9px}
+#nav button svg{width:16px;height:16px;flex:0 0 16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.side{padding-top:22px}
+
+/* 二级菜单 */
+.sub {
+	display: none;
+	flex-direction: column;
+	gap: 2px;
+	margin: 2px 0 4px 14px;
+	padding-left: 8px;
+	border-left: 1px solid var(--line);
+}
+
+.sub.open { display: flex; }
+
+.sub button {
+	font-size: 13px;
+	padding: 7px 10px;
+	color: var(--muted);
+	background: transparent;
+	border: 0;
+	border-radius: 6px;
+	text-align: left;
+	cursor: pointer;
+}
+
+.sub button:hover { background: #16203a; color: var(--text); }
+.sub button.on { background: #1b2744; color: #fff; }
+
+#sys-toggle .chev { margin-left: auto; transition: transform .2s; }
+#sys-toggle.open .chev { transform: rotate(180deg); }
+
+/* 表格 */
+.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+.tbl th {
+	text-align: left;
+	color: var(--muted);
+	font-weight: 500;
+	padding: 8px 10px;
+	border-bottom: 1px solid var(--line);
+	white-space: nowrap;
+}
+
+.tbl td { padding: 9px 10px; border-bottom: 1px solid #1b2438; }
+.tbl tr:hover td { background: #16203a; }
+.muted { color: var(--muted); }
+
+/* 输出框 */
+.out {
+	background: #0a0f1c;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	padding: 12px;
+	font-size: 12px;
+	line-height: 1.6;
+	white-space: pre-wrap;
+	max-height: 50vh;
+	overflow: auto;
+	color: #cfe0ff;
+	margin: 10px 0 0;
+}
+
+/* 小按钮 */
+.mini {
+	background: #1b2744;
+	color: var(--text);
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	padding: 4px 10px;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.mini:hover { border-color: var(--acc); }
+.mini.danger { color: #ffb4b4; border-color: #5a2626; }
+
+.primary.danger { background: #d9534f; }
+.primary.danger:hover { background: #c9302c; }
+
+/* 行内控件 */
+input.inline {
+	display: inline-block;
+	width: auto;
+	min-width: 160px;
+	max-width: 260px;
+	margin: 0;
+}
+
+input.inline.short { min-width: 90px; max-width: 120px; }
+
+.row select {
+	background: #0a0f1c;
+	color: var(--text);
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	padding: 9px 10px;
+	font-size: 14px;
+}
+
+</style>
+</head>
+<body>
+<div class="app">
+	<aside class="side">
+		<div class="brand"><span class="dot"></span>IPTV 管理面板</div>
+		<nav id="nav">
+			<button data-v="overview" class="on"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>主页</button>
+			<button data-v="list"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>播放列表</button>
+			<button data-v="wan"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>外网配置</button>
+			<button data-v="lan"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="7" cy="17" r="2"/></svg>IPTV 配置</button>
+			<button data-v="sys" id="sys-toggle"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>系统<span class="chev">▾</span></button>
+			<div id="sys-sub" class="sub">
+				<button data-v="ifaces">接口</button>
+				<button data-v="vlan">VLAN</button>
+				<button data-v="routes">路由</button>
+				<button data-v="rtp2httpd">rtp2httpd</button>
+				<button data-v="diag">网络诊断</button>
+				<button data-v="firewall">防火墙</button>
+				<button data-v="backup">备份/升级</button>
+				<button data-v="reboot">重启</button>
+			</div>
+		</nav>
+		<div class="side-foot">
+			<div id="host">—</div>
+			<button class="logout" id="btn-logout">退出登录</button>
+		</div>
+	</aside>
+
+	<main>
+		<header class="top">
+			<h1 id="title">主页</h1>
+			<div class="top-right">
+				<span class="pill" id="mode-pill">—</span>
+				<button class="ghost" id="btn-refresh">刷新</button>
+			</div>
+		</header>
+
+		<section id="v-overview" class="view on">
+			<div class="cards">
+				<div class="card"><div class="k">1 分钟负载</div><div class="v" id="s-load">—</div></div>
+				<div class="card"><div class="k">内存已用</div><div class="v" id="s-mem">—</div></div>
+				<div class="card"><div class="k">运行时间</div><div class="v" id="s-up">—</div></div>
+				<div class="card"><div class="k">频道数</div><div class="v" id="s-ch">—</div></div>
+			</div>
+			<div class="panel"><h2>线路状态</h2><div class="lines" id="lines"></div></div>
+			<div class="panel"><h2>外网</h2><div class="kv" id="wan-info"></div></div>
+		</section>
+
+		<section id="v-lan" class="view">
+			<div class="panel">
+				<h2>IPTV 配置</h2>
+				<p class="desc">桥接：lan2/3/4 合成一个二层，只能接一路 IPTV 线（端口 5000）。解开：三个口各自独立，可接三路线路（5000 / 5001 / 5002）。</p>
+				<div class="seg" id="mode-seg">
+					<button data-m="bridge">桥接</button>
+					<button data-m="split">解开</button>
+				</div>
+				<button class="primary" id="btn-mode">应用网络模式</button>
+			</div>
+		</section>
+
+		<section id="v-wan" class="view">
+			<div class="panel">
+				<h2>外网配置</h2>
+				<p class="desc">自动获取：由上级路由器分配。手动设置：固定 IP，播放列表里写的地址要和这里一致。</p>
+				<div class="field">
+					<label>获取方式</label>
+					<div class="seg" id="proto-seg">
+						<button data-p="dhcp">自动获取</button>
+						<button data-p="static">手动设置</button>
+					</div>
+				</div>
+				<div id="static-box">
+					<div class="field"><label>IP 地址</label><input id="w-ip" placeholder="192.168.110.115"></div>
+					<div class="field"><label>子网掩码</label><input id="w-mask" value="255.255.255.0"></div>
+					<div class="field"><label>网关</label><input id="w-gw" placeholder="192.168.110.1"></div>
+					<div class="field"><label>DNS</label><input id="w-dns" placeholder="可留空，多个用空格分隔"></div>
+				</div>
+				<button class="primary" id="btn-wan">保存外网配置</button>
+			</div>
+		</section>
+
+		<section id="v-list" class="view">
+			<div class="panel">
+				<h2>播放列表</h2>
+				<p class="desc">格式：分组行 <code>央视,#genre#</code>；频道行 <code>名称,http://IP:端口/udp/组播地址:端口</code>。端口决定线路：5000=lan2，5001=lan3，5002=lan4。</p>
+				<textarea id="list" spellcheck="false" wrap="off"></textarea>
+				<div class="row">
+					<button class="primary" id="btn-list">保存播放列表</button>
+					<span class="hint" id="list-hint"></span>
+				</div>
+			</div>
+		</section>
+
+		<section id="v-ifaces" class="view">
+			<div class="panel">
+				<h2>接口</h2>
+				<p class="desc">当前 network 配置里的所有接口。</p>
+				<table class="tbl" id="tbl-ifaces"><thead><tr><th>名称</th><th>设备</th><th>协议</th><th>地址</th><th>状态</th></tr></thead><tbody></tbody></table>
+			</div>
+		</section>
+
+		<section id="v-vlan" class="view">
+			<div class="panel">
+				<h2>VLAN</h2>
+				<p class="desc">当前配置的 bridge-vlan 条目。</p>
+				<table class="tbl" id="tbl-vlan"><thead><tr><th>名称</th><th>网桥</th><th>VLAN</th><th>端口</th></tr></thead><tbody></tbody></table>
+			</div>
+		</section>
+
+		<section id="v-routes" class="view">
+			<div class="panel">
+				<h2>路由</h2>
+				<p class="desc">系统当前路由表。</p>
+				<pre class="out" id="out-routes">加载中…</pre>
+			</div>
+		</section>
+
+		<section id="v-rtp2httpd" class="view">
+			<div class="panel">
+				<h2>rtp2httpd</h2>
+				<p class="desc">每个实例的监听端口、上游接口和进程数。</p>
+				<table class="tbl" id="tbl-rtp"><thead><tr><th>实例</th><th>监听</th><th>上游接口</th><th>workers</th><th>启用</th></tr></thead><tbody></tbody></table>
+			</div>
+		</section>
+
+		<section id="v-diag" class="view">
+			<div class="panel">
+				<h2>网络诊断</h2>
+				<div class="row">
+					<select id="diag-kind">
+						<option value="ping">Ping</option>
+						
+						<option value="dns">DNS 查询</option>
+						<option value="port">端口检测</option>
+					</select>
+					<input id="diag-target" class="inline" placeholder="地址或域名">
+					<input id="diag-port" class="inline short" placeholder="端口">
+					<button class="primary" id="btn-diag">开始</button>
+				</div>
+				<pre class="out" id="out-diag"></pre>
+			</div>
+		</section>
+
+		<section id="v-firewall" class="view">
+			<div class="panel">
+				<h2>防火墙规则</h2>
+				<p class="desc">显示 uci 里的 rule 条目，可启用/停用/删除，或新增一条 WAN 放行规则。</p>
+				<table class="tbl" id="tbl-fw"><thead><tr><th>名称</th><th>来源</th><th>协议</th><th>端口</th><th>动作</th><th>状态</th><th>操作</th></tr></thead><tbody></tbody></table>
+			</div>
+			<div class="panel">
+				<h2>新增放行规则</h2>
+				<div class="row">
+					<input id="fw-name" class="inline" placeholder="名称">
+					<select id="fw-proto"><option value="tcp">TCP</option><option value="udp">UDP</option><option value="tcp udp">TCP+UDP</option></select>
+					<input id="fw-port" class="inline short" placeholder="端口">
+					<button class="primary" id="btn-fw-add">添加</button>
+				</div>
+			</div>
+		</section>
+
+		<section id="v-backup" class="view">
+			<div class="panel">
+				<h2>备份 / 升级</h2>
+				<p class="desc">备份会打包 /etc/config 等配置；恢复会把备份解压回系统，建议恢复后重启。</p>
+				<div class="row">
+					<button class="primary" id="btn-backup">下载配置备份</button>
+					<input type="file" id="restore-file" accept=".gz,.tar.gz">
+					<button class="ghost" id="btn-restore">恢复备份</button>
+				</div>
+				<p class="desc">固件升级请用 U-Boot 网页（192.168.1.1）刷写，面板不提供。</p>
+			</div>
+		</section>
+
+		<section id="v-reboot" class="view">
+			<div class="panel">
+				<h2>重启设备</h2>
+				<p class="desc">点击后 1 秒开始重启，约 60 秒后恢复。</p>
+				<button class="primary danger" id="btn-reboot">立即重启</button>
+			</div>
+		</section>
+
+		<div id="toast" class="toast"></div>
+	</main>
+</div>
+<script>
+'use strict';
+
+const $ = (s) => document.querySelector(s);
+
+const state = { mode: 'split', proto: 'dhcp', loaded: false };
+
+const titles = {
+	overview: '主页', list: '播放列表', wan: '外网配置', lan: 'IPTV 配置',
+	ifaces: '接口', vlan: 'VLAN', routes: '路由', rtp2httpd: 'rtp2httpd',
+	diag: '网络诊断', firewall: '防火墙', backup: '备份/升级', reboot: '重启'
+};
+
+function toast(msg, kind) {
+	const t = $('#toast');
+	t.textContent = msg;
+	t.className = 'toast on ' + (kind || 'ok');
+	clearTimeout(t._t);
+	t._t = setTimeout(() => { t.className = 'toast ' + (kind || 'ok'); }, 2600);
+}
+
+function esc(s) {
+	return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function fmtUp(sec) {
+	sec = Math.floor(Number(sec) || 0);
+	const d = Math.floor(sec / 86400);
+	const h = Math.floor((sec % 86400) / 3600);
+	const m = Math.floor((sec % 3600) / 60);
+	if (d > 0)
+		return d + '天' + h + '时';
+	return h + '时' + m + '分';
+}
+
+function setSeg(sel, attr, val) {
+	document.querySelectorAll(sel + ' button').forEach((b) => {
+		b.classList.toggle('on', b.getAttribute(attr) === val);
+	});
+}
+
+function needLogin(d) {
+	if (d && d.error === 'unauthorized')
+		location.reload();
+}
+
+async function apiGet(action, raw) {
+	const r = await fetch('/cgi-bin/panel?action=' + action, { cache: 'no-store', credentials: 'same-origin' });
+	return raw ? r.text() : r.json();
+}
+
+async function apiPost(action, body, raw) {
+	const r = await fetch('/cgi-bin/panel?action=' + action, {
+		method: 'POST',
+		credentials: 'same-origin',
+		headers: (typeof body === 'string' || body instanceof Blob) ? { 'Content-Type': 'text/plain' } : { 'Content-Type': 'application/json' },
+		body: (typeof body === 'string' || body instanceof Blob) ? body : JSON.stringify(body || {})
+	});
+	return raw ? r.text() : r.json();
+}
+
+/* ---------- 主页 ---------- */
+async function refresh() {
+	try {
+		const d = await apiGet('status');
+		if (!d.ok) { needLogin(d); throw new Error(d.error || '读取失败'); }
+
+		state.mode = d.mode;
+		state.proto = d.wan.proto;
+
+		$('#s-load').textContent = d.load + ' / ' + d.cores + ' 核';
+		$('#s-mem').textContent = d.mem + '%';
+		$('#s-up').textContent = fmtUp(d.uptime);
+		$('#s-ch').textContent = d.channels + ' 个';
+		$('#host').textContent = d.host + ' · ' + (d.wan.addr || '无外网');
+
+		const pill = $('#mode-pill');
+		pill.textContent = d.mode === 'bridge' ? '桥接模式' : '解开模式';
+		pill.className = 'pill ' + (d.mode === 'bridge' ? 'warn' : 'ok');
+
+		const names = { '5000': '线路 1 · lan2', '5001': '线路 2 · lan3', '5002': '线路 3 · lan4' };
+		const lines = $('#lines');
+		lines.innerHTML = '';
+		[ '5000', '5001', '5002' ].forEach((p) => {
+			const on = !!d.ports[p];
+			const el = document.createElement('div');
+			el.className = 'line-item';
+			el.innerHTML =
+				'<div class="l"><span class="st ' + (on ? 'ok' : 'bad') + '">' + (on ? '●' : '○') + '</span><span>' + names[p] + '</span></div>' +
+				'<div class="st ' + (on ? 'ok' : 'bad') + '">端口 ' + p + ' ' + (on ? '监听中' : '未启动') + '</div>';
+			lines.appendChild(el);
+		});
+
+		$('#wan-info').innerHTML =
+			'<div class="k">方式</div><div class="v">' + (d.wan.proto === 'static' ? '手动设置' : '自动获取') + '</div>' +
+			'<div class="k">当前地址</div><div class="v">' + (d.wan.addr || '—') + '</div>' +
+			'<div class="k">网关</div><div class="v">' + (d.wan.gateway || '—') + '</div>' +
+			'<div class="k">DNS</div><div class="v">' + (d.wan.dns || '—') + '</div>';
+
+		setSeg('#mode-seg', 'data-m', d.mode);
+		setSeg('#proto-seg', 'data-p', d.wan.proto);
+		$('#static-box').style.display = d.wan.proto === 'static' ? '' : 'none';
+		if (d.wan.proto === 'static') {
+			$('#w-ip').value = d.wan.ip || '';
+			$('#w-mask').value = d.wan.netmask || '255.255.255.0';
+			$('#w-gw').value = d.wan.gateway || '';
+			$('#w-dns').value = d.wan.dns || '';
+		}
+	}
+	catch (e) {
+		toast('读取状态失败：' + e.message, 'bad');
+	}
+}
+
+async function loadList() {
+	try {
+		const t = await apiGet('playlist', true);
+		if (t.indexOf('"error"') === 0) { location.reload(); return; }
+		$('#list').value = t;
+	}
+	catch (e) {
+		toast('读取列表失败', 'bad');
+	}
+}
+
+/* ---------- 系统页 ---------- */
+async function loadIfaces() {
+	const d = await apiGet('interfaces');
+	if (!d.ok) { needLogin(d); return; }
+	const tb = document.querySelector('#tbl-ifaces tbody');
+	tb.innerHTML = d.items.map((i) =>
+		'<tr><td>' + esc(i.name) + '</td><td>' + esc(i.device) + '</td><td>' + esc(i.proto) + '</td><td>' + esc(i.addrs || '—') + '</td><td class="' + (i.up ? 'ok' : 'bad') + '">' + (i.up ? 'UP' : 'DOWN') + '</td></tr>'
+	).join('') || '<tr><td colspan="5" class="muted">暂无</td></tr>';
+}
+
+async function loadVlan() {
+	const d = await apiGet('vlans');
+	if (!d.ok) { needLogin(d); return; }
+	const tb = document.querySelector('#tbl-vlan tbody');
+	tb.innerHTML = d.items.map((i) =>
+		'<tr><td>' + esc(i.name) + '</td><td>' + esc(i.device) + '</td><td>' + esc(i.vlan) + '</td><td>' + esc(i.ports) + '</td></tr>'
+	).join('') || '<tr><td colspan="4" class="muted">暂无（当前可能是解开模式）</td></tr>';
+}
+
+async function loadRoutes() {
+	$('#out-routes').textContent = await apiGet('routes', true);
+}
+
+async function loadRtp() {
+	const d = await apiGet('rtp2httpd');
+	if (!d.ok) { needLogin(d); return; }
+	const tb = document.querySelector('#tbl-rtp tbody');
+	tb.innerHTML = d.items.map((i) =>
+		'<tr><td>' + esc(i.name) + '</td><td>' + esc(i.listen) + '</td><td>' + esc(i.upstream) + '</td><td>' + esc(i.workers) + '</td><td>' + (i.enabled === '1' ? '<span class="ok">是</span>' : '<span class="bad">否</span>') + '</td></tr>'
+	).join('') || '<tr><td colspan="5" class="muted">暂无</td></tr>';
+}
+
+async function runDiag() {
+	const kind = $('#diag-kind').value;
+	const target = $('#diag-target').value.trim();
+	const port = $('#diag-port').value.trim();
+	if (!target) { toast('请填写地址', 'bad'); return; }
+	$('#out-diag').textContent = '执行中…';
+	try {
+		const t = await apiPost('diag', { kind: kind, target: target, port: port }, true);
+		$('#out-diag').textContent = t;
+	}
+	catch (e) {
+		$('#out-diag').textContent = '执行失败';
+	}
+}
+
+async function loadFirewall() {
+	const d = await apiGet('firewall');
+	if (!d.ok) { needLogin(d); return; }
+	const tb = document.querySelector('#tbl-fw tbody');
+	tb.innerHTML = d.items.map((r) =>
+		'<tr><td>' + esc(r.name || r.id) + '</td><td>' + esc(r.src) + '</td><td>' + esc(r.proto) + '</td><td>' + esc(r.port) + '</td><td>' + esc(r.target) + '</td>' +
+		'<td>' + (r.enabled ? '<span class="ok">启用</span>' : '<span class="bad">停用</span>') + '</td>' +
+		'<td><button class="mini" data-t="' + r.id + '" data-e="' + (r.enabled ? '0' : '1') + '">' + (r.enabled ? '停用' : '启用') + '</button> ' +
+		'<button class="mini danger" data-d="' + r.id + '">删除</button></td></tr>'
+	).join('') || '<tr><td colspan="7" class="muted">暂无自定义规则</td></tr>';
+}
+
+function bindFirewall() {
+	document.querySelector('#tbl-fw').addEventListener('click', async (e) => {
+		const t = e.target;
+		if (t.dataset && t.dataset.t) {
+			const d = await apiPost('fw_toggle', { id: t.dataset.t, enabled: t.dataset.e === '1' });
+			if (!d.ok) { needLogin(d); toast(d.error || '失败', 'bad'); }
+			else { toast('已切换'); loadFirewall(); }
+		}
+		else if (t.dataset && t.dataset.d) {
+			if (!confirm('确定删除这条规则？')) return;
+			const d = await apiPost('fw_del', { id: t.dataset.d });
+			if (!d.ok) { needLogin(d); toast(d.error || '失败', 'bad'); }
+			else { toast('已删除'); loadFirewall(); }
+		}
+	});
+}
+
+async function addFw() {
+	const name = $('#fw-name').value.trim() || 'panel-rule';
+	const port = $('#fw-port').value.trim();
+	const proto = $('#fw-proto').value;
+	if (!port) { toast('请填写端口', 'bad'); return; }
+	const d = await apiPost('fw_add', { name: name, port: port, proto: proto });
+	if (!d.ok) { needLogin(d); toast(d.error || '失败', 'bad'); return; }
+	toast('已添加');
+	$('#fw-name').value = '';
+	$('#fw-port').value = '';
+	loadFirewall();
+}
+
+/* ---------- 导航 ---------- */
+function nav(v) {
+	document.querySelectorAll('#nav button').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
+	document.querySelectorAll('.view').forEach((s) => s.classList.toggle('on', s.id === 'v-' + v));
+	$('#title').textContent = titles[v] || '';
+
+	if ([ 'ifaces', 'vlan', 'routes', 'rtp2httpd', 'diag', 'firewall', 'backup', 'reboot' ].indexOf(v) >= 0) {
+		$('#sys-sub').classList.add('open');
+		$('#sys-toggle').classList.add('open');
+	}
+
+	if (v === 'list' && !state.loaded) { state.loaded = true; loadList(); }
+	if (v === 'ifaces') loadIfaces();
+	if (v === 'vlan') loadVlan();
+	if (v === 'routes') loadRoutes();
+	if (v === 'rtp2httpd') loadRtp();
+	if (v === 'firewall') loadFirewall();
+	if (v === 'overview') refresh();
+}
+
+document.querySelectorAll('#nav button').forEach((b) => {
+	if (b.id === 'sys-toggle') {
+		b.addEventListener('click', () => {
+			$('#sys-sub').classList.toggle('open');
+			b.classList.toggle('open');
+		});
+		return;
+	}
+	if (b.dataset.v)
+		b.addEventListener('click', () => nav(b.dataset.v));
+});
+
+document.querySelectorAll('#mode-seg button').forEach((b) => {
+	b.addEventListener('click', () => setSeg('#mode-seg', 'data-m', b.dataset.m));
+});
+
+document.querySelectorAll('#proto-seg button').forEach((b) => {
+	b.addEventListener('click', () => {
+		setSeg('#proto-seg', 'data-p', b.dataset.p);
+		$('#static-box').style.display = b.dataset.p === 'static' ? '' : 'none';
+	});
+});
+
+$('#btn-refresh').addEventListener('click', () => { refresh(); toast('已刷新'); });
+
+$('#btn-mode').addEventListener('click', async () => {
+	const sel = document.querySelector('#mode-seg button.on');
+	const mode = sel ? sel.dataset.m : 'split';
+	$('#btn-mode').disabled = true;
+	try {
+		const d = await apiPost('mode', { mode: mode });
+		if (!d.ok) { needLogin(d); throw new Error(d.error || '失败'); }
+		toast('已切换为「' + (mode === 'bridge' ? '桥接' : '解开') + '」');
+		setTimeout(refresh, 1500);
+	}
+	catch (e) { toast('切换失败：' + e.message, 'bad'); }
+	finally { $('#btn-mode').disabled = false; }
+});
+
+$('#btn-wan').addEventListener('click', async () => {
+	const sel = document.querySelector('#proto-seg button.on');
+	const proto = sel ? sel.dataset.p : 'dhcp';
+	const body = { proto: proto };
+	if (proto === 'static') {
+		body.ip = $('#w-ip').value.trim();
+		body.netmask = $('#w-mask').value.trim() || '255.255.255.0';
+		body.gateway = $('#w-gw').value.trim();
+		body.dns = $('#w-dns').value.trim();
+		if (!body.ip) { toast('请填写 IP 地址', 'bad'); return; }
+	}
+	$('#btn-wan').disabled = true;
+	try {
+		const d = await apiPost('wan', body);
+		if (!d.ok) { needLogin(d); throw new Error(d.error || '失败'); }
+		toast('外网配置已应用');
+		setTimeout(refresh, 1500);
+	}
+	catch (e) { toast('应用失败：' + e.message, 'bad'); }
+	finally { $('#btn-wan').disabled = false; }
+});
+
+$('#btn-list').addEventListener('click', async () => {
+	const text = $('#list').value;
+	const count = (text.match(/\/udp\//g) || []).length;
+	$('#btn-list').disabled = true;
+	try {
+		const d = await apiPost('save_playlist', text);
+		if (!d.ok) { needLogin(d); throw new Error(d.error || '失败'); }
+		$('#list-hint').textContent = '已保存 ' + count + ' 个频道';
+		toast('播放列表已保存');
+		setTimeout(refresh, 1200);
+	}
+	catch (e) { toast('保存失败：' + e.message, 'bad'); }
+	finally { $('#btn-list').disabled = false; }
+});
+
+$('#btn-diag').addEventListener('click', runDiag);
+$('#btn-fw-add').addEventListener('click', addFw);
+bindFirewall();
+
+$('#btn-backup').addEventListener('click', () => {
+	window.location.href = '/cgi-bin/panel?action=backup';
+});
+
+$('#btn-restore').addEventListener('click', async () => {
+	const f = $('#restore-file').files[0];
+	if (!f) { toast('先选择备份文件', 'bad'); return; }
+	if (!confirm('恢复会覆盖当前配置，确定继续？')) return;
+	try {
+		const d = await apiPost('restore', f);
+		if (!d.ok) { needLogin(d); throw new Error(d.error || '失败'); }
+		toast('已恢复，建议重启');
+	}
+	catch (e) { toast('恢复失败：' + e.message, 'bad'); }
+});
+
+$('#btn-reboot').addEventListener('click', async () => {
+	if (!confirm('确定重启设备？')) return;
+	try {
+		await apiPost('reboot', {});
+		toast('设备正在重启…');
+	}
+	catch (e) { toast('重启请求失败', 'bad'); }
+});
+
+$('#btn-logout').addEventListener('click', async () => {
+	try { await apiPost('logout', {}); } catch (e) {}
+	location.reload();
+});
+
+refresh();
+setInterval(() => { if ($('#v-overview').classList.contains('on')) refresh(); }, 30000);
+
+</script>
+</body>
+</html>

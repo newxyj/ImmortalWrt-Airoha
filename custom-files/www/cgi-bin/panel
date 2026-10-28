@@ -1,0 +1,395 @@
+#!/bin/sh
+# IPTV 管理面板（CGI）：页面 + 接口 + 会话认证
+
+APP_FILE=/etc/panel/app.html
+LOGIN_FILE=/etc/panel/login.html
+PASS_FILE=/etc/panel/passwd
+SESS_DIR=/tmp/panel-sessions
+FAIL_DIR=/tmp/panel-fails
+SESSION_TTL=43200
+MAX_FAIL=5
+LOCK_SEC=300
+
+json() {
+	printf 'Content-Type: application/json\r\nCache-Control: no-store\r\n\r\n%s' "$1"
+	exit 0
+}
+
+text() {
+	printf 'Content-Type: text/plain; charset=utf-8\r\nCache-Control: no-store\r\n\r\n'
+}
+
+err() {
+	json "{\"ok\":false,\"error\":\"$1\"}"
+}
+
+REMOTE=${REMOTE_ADDR:-}
+case "$REMOTE" in
+	192.168.*|10.*|127.*|::1|::ffff:192.168.*|::ffff:10.*) ;;
+	*) json '{"ok":false,"error":"forbidden"}' ;;
+esac
+
+ACTION=$(printf '%s' "$QUERY_STRING" | sed -n 's/.*action=\([a-zA-Z0-9_]*\).*/\1/p')
+METHOD=${REQUEST_METHOD:-GET}
+
+field() {
+	printf '%s' "$BODY" | jsonfilter -e "@.$1" 2>/dev/null
+}
+
+token_of() {
+	printf '%s' "${HTTP_COOKIE:-}" | tr ';' '\n' |
+		sed -n 's/^ *panel_token=\([0-9a-f]*\).*/\1/p' | head -1
+}
+
+authed() {
+	T=$(token_of)
+	[ -n "$T" ] || return 1
+	F="$SESS_DIR/$T"
+	[ -f "$F" ] || return 1
+	E=$(cat "$F" 2>/dev/null)
+	[ -n "$E" ] || return 1
+	[ "$(date +%s)" -lt "$E" ]
+}
+
+# ---------- 页面 ----------
+if [ -z "$ACTION" ] && [ "$METHOD" = "GET" ]; then
+	printf 'Content-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\n\r\n'
+	if authed && [ ! -f /etc/panel/.must-change ]; then
+		cat "$APP_FILE"
+	else
+		cat "$LOGIN_FILE"
+	fi
+	exit 0
+fi
+
+# ---------- 恢复备份（二进制上传，先落地） ----------
+if [ "$ACTION" = "restore" ] && [ "$METHOD" = "POST" ]; then
+	authed || json '{"ok":false,"error":"unauthorized"}'
+	dd bs=1024 count=$(( (${CONTENT_LENGTH:-0} + 1023) / 1024 )) of=/tmp/panel-restore.tar.gz 2>/dev/null
+	tar tzf /tmp/panel-restore.tar.gz >/dev/null 2>&1 || json '{"ok":false,"error":"不是有效的备份文件"}'
+	tar xzf /tmp/panel-restore.tar.gz -C / 2>/dev/null
+	json '{"ok":true}'
+fi
+
+BODY=""
+if [ "$METHOD" = "POST" ] && [ "${CONTENT_LENGTH:-0}" -gt 0 ]; then
+	BODY=$(dd bs=1 count="$CONTENT_LENGTH" 2>/dev/null)
+fi
+
+# ---------- 认证 ----------
+case "$ACTION" in
+login)
+	U=$(field username)
+	P=$(field password)
+	NOW=$(date +%s)
+	FA="$FAIL_DIR/$REMOTE"
+
+	if [ -f "$FA" ]; then
+		CNT=0; LOCK=0
+		read CNT LOCK < "$FA" 2>/dev/null
+		if [ -n "$LOCK" ] && [ "$LOCK" -gt "$NOW" ]; then
+			json '{"ok":false,"error":"尝试过多，请 5 分钟后再试"}'
+		fi
+	fi
+
+	if [ "$U" != "admin" ] || [ -z "$P" ] || [ ! -f "$PASS_FILE" ]; then
+		CNT=$(( ${CNT:-0} + 1 )); LOCK=0
+		[ "$CNT" -ge "$MAX_FAIL" ] && LOCK=$(( NOW + LOCK_SEC ))
+		mkdir -p "$FAIL_DIR"
+		printf '%s %s\n' "$CNT" "$LOCK" > "$FA"
+		json '{"ok":false,"error":"用户名或密码错误"}'
+	fi
+
+	SALT=$(cut -d'$' -f2 "$PASS_FILE")
+	HASH=$(cut -d'$' -f3 "$PASS_FILE")
+	CALC=$(printf '%s%s' "$SALT" "$P" | sha256sum | cut -d' ' -f1)
+	if [ "$CALC" != "$HASH" ]; then
+		CNT=$(( ${CNT:-0} + 1 )); LOCK=0
+		[ "$CNT" -ge "$MAX_FAIL" ] && LOCK=$(( NOW + LOCK_SEC ))
+		mkdir -p "$FAIL_DIR"
+		printf '%s %s\n' "$CNT" "$LOCK" > "$FA"
+		json '{"ok":false,"error":"用户名或密码错误"}'
+	fi
+
+	rm -f "$FA"
+	T=$( (date +%s; cat /proc/sys/kernel/random/uuid) | md5sum | cut -d' ' -f1)
+	mkdir -p "$SESS_DIR"
+	printf '%s\n' $(( NOW + SESSION_TTL )) > "$SESS_DIR/$T"
+	MC=false
+	[ -f /etc/panel/.must-change ] && MC=true
+	printf 'Content-Type: application/json\r\nSet-Cookie: panel_token=%s; Path=/; Max-Age=%s; HttpOnly; SameSite=Lax\r\nCache-Control: no-store\r\n\r\n{"ok":true,"must_change":%s}' "$T" "$SESSION_TTL" "$MC"
+	exit 0
+	;;
+
+check)
+	if authed; then
+		MC=false
+		[ -f /etc/panel/.must-change ] && MC=true
+		json "{\"ok\":true,\"must_change\":$MC}"
+	else
+		json '{"ok":false,"error":"unauthorized"}'
+	fi
+	;;
+
+logout)
+	T=$(token_of)
+	[ -n "$T" ] && rm -f "$SESS_DIR/$T"
+	printf 'Content-Type: application/json\r\nSet-Cookie: panel_token=; Path=; Max-Age=0\r\nCache-Control: no-store\r\n\r\n{"ok":true}'
+	exit 0
+	;;
+esac
+
+authed || json '{"ok":false,"error":"unauthorized"}'
+
+# ---------- 业务接口 ----------
+case "$ACTION" in
+passwd)
+	P=$(field password)
+	[ -n "$P" ] || err "empty"
+	LEN=$(printf '%s' "$P" | wc -c)
+	[ "$LEN" -ge 6 ] || err "密码至少 6 位"
+	SALT=$(cat /proc/sys/kernel/random/uuid | tr -d '-' | cut -c1-12)
+	HASH=$(printf '%s%s' "$SALT" "$P" | sha256sum | cut -d' ' -f1)
+	printf 'sha256$%s$%s\n' "$SALT" "$HASH" > "$PASS_FILE"
+	chmod 600 "$PASS_FILE"
+	rm -f /etc/panel/.must-change
+	json '{"ok":true}'
+	;;
+
+status)
+	LOAD=$(cut -d' ' -f1 /proc/loadavg)
+	CORES=$(grep -c '^processor' /proc/cpuinfo)
+	MEMT=$(awk '/^MemTotal:/{print $2}' /proc/meminfo)
+	MEMA=$(awk '/^MemAvailable:/{print $2}' /proc/meminfo)
+	[ -n "$MEMT" ] && [ "$MEMT" -gt 0 ] && MEMPC=$(( (MEMT - MEMA) * 100 / MEMT )) || MEMPC=0
+	UPT=$(cut -d. -f1 /proc/uptime)
+
+	if uci -q get network.br_iptv.proto >/dev/null 2>&1; then MODE=bridge; else MODE=split; fi
+
+	P5000=false; netstat -lnt 2>/dev/null | grep -q ':5000 ' && P5000=true
+	P5001=false; netstat -lnt 2>/dev/null | grep -q ':5001 ' && P5001=true
+	P5002=false; netstat -lnt 2>/dev/null | grep -q ':5002 ' && P5002=true
+
+	CH=$(grep -c '/udp/' /www/playlist.txt 2>/dev/null)
+	[ -z "$CH" ] && CH=0
+
+	WPROTO=$(uci -q get network.wan.proto)
+	WIP=$(uci -q get network.wan.ipaddr)
+	WMASK=$(uci -q get network.wan.netmask)
+	WGW=$(uci -q get network.wan.gateway)
+	WDNS=$(uci -q get network.wan.dns)
+	WADDR=$(ip -4 -o addr show dev lan1 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)
+	HOST=$(cat /proc/sys/kernel/hostname)
+
+	json "{\"ok\":true,\"host\":\"$HOST\",\"load\":\"$LOAD\",\"cores\":$CORES,\"mem\":$MEMPC,\"uptime\":$UPT,\"mode\":\"$MODE\",\"channels\":$CH,\"ports\":{\"5000\":$P5000,\"5001\":$P5001,\"5002\":$P5002},\"wan\":{\"proto\":\"$WPROTO\",\"ip\":\"$WIP\",\"netmask\":\"$WMASK\",\"gateway\":\"$WGW\",\"dns\":\"$WDNS\",\"addr\":\"$WADDR\"}}"
+	;;
+
+playlist)
+	text
+	cat /www/playlist.txt 2>/dev/null
+	exit 0
+	;;
+
+save_playlist)
+	[ "$METHOD" = "POST" ] || err "post required"
+	[ -n "$BODY" ] || err "empty"
+	printf '%s\n' "$BODY" > /tmp/panel-playlist.txt
+	grep -q '/udp/' /tmp/panel-playlist.txt || err "no channel found"
+	cp /tmp/panel-playlist.txt /www/playlist.txt
+	/usr/bin/playlist-sync >/dev/null 2>&1 &
+	json '{"ok":true}'
+	;;
+
+mode)
+	M=$(field mode)
+	case "$M" in bridge|split) ;; *) err "bad mode" ;; esac
+	/usr/bin/iptv-mode "$M" >/dev/null 2>&1
+	json "{\"ok\":true,\"mode\":\"$M\"}"
+	;;
+
+wan)
+	P=$(field proto)
+	case "$P" in
+		dhcp)
+			uci -q set network.wan.proto='dhcp'
+			uci -q delete network.wan.ipaddr
+			uci -q delete network.wan.netmask
+			uci -q delete network.wan.gateway
+			uci -q delete network.wan.dns
+			;;
+		static)
+			IP=$(field ip)
+			[ -n "$IP" ] || err "ip required"
+			uci -q set network.wan.proto='static'
+			uci -q set network.wan.ipaddr="$IP"
+			uci -q set network.wan.netmask="$(field netmask)"
+			[ -n "$(field gateway)" ] && uci -q set network.wan.gateway="$(field gateway)" || uci -q delete network.wan.gateway
+			if [ -n "$(field dns)" ]; then
+				uci -q delete network.wan.dns
+				for d in $(field dns | tr ',' ' '); do uci -q add_list network.wan.dns="$d"; done
+			else
+				uci -q delete network.wan.dns
+			fi
+			;;
+		*) err "bad proto" ;;
+	esac
+	uci -q commit network
+	( sleep 1; ifup wan ) >/dev/null 2>&1 &
+	json '{"ok":true}'
+	;;
+
+interfaces)
+	OUT=""
+	for n in $(uci show network 2>/dev/null | sed -n "s/^network\.\([A-Za-z0-9_]*\)=interface$/\1/p"); do
+		DEV=$(uci -q get network.$n.device)
+		PROTO=$(uci -q get network.$n.proto)
+		ADDRS=$(ip -4 -o addr show dev "$DEV" 2>/dev/null | awk '{print $4}' | tr '\n' ' ')
+		UP=false
+		ip link show "$DEV" 2>/dev/null | grep -q 'state UP' && UP=true
+		[ -n "$OUT" ] && OUT="$OUT,"
+		OUT="$OUT{\"name\":\"$n\",\"device\":\"$DEV\",\"proto\":\"$PROTO\",\"up\":$UP,\"addrs\":\"$ADDRS\"}"
+	done
+	json "{\"ok\":true,\"items\":[$OUT]}"
+	;;
+
+vlans)
+	OUT=""
+	for n in $(uci show network 2>/dev/null | sed -n "s/^network\.\([A-Za-z0-9_]*\)=bridge-vlan$/\1/p"); do
+		DEV=$(uci -q get network.$n.device)
+		VID=$(uci -q get network.$n.vlan)
+		PORTS=$(uci -q get network.$n.ports)
+		[ -n "$OUT" ] && OUT="$OUT,"
+		OUT="$OUT{\"name\":\"$n\",\"device\":\"$DEV\",\"vlan\":\"$VID\",\"ports\":\"$PORTS\"}"
+	done
+	json "{\"ok\":true,\"items\":[$OUT]}"
+	;;
+
+routes)
+	text
+	echo "=== IPv4 ==="
+	ip -4 route 2>/dev/null
+	echo
+	echo "=== IPv6 ==="
+	ip -6 route 2>/dev/null
+	exit 0
+	;;
+
+rtp2httpd)
+	OUT=""
+	for n in $(uci show rtp2httpd 2>/dev/null | sed -n "s/^rtp2httpd\.\([A-Za-z0-9_]*\)=instance$/\1/p"); do
+		L=$(uci -q get rtp2httpd.$n.listen)
+		U=$(uci -q get rtp2httpd.$n.upstream_interface)
+		W=$(uci -q get rtp2httpd.$n.workers)
+		EN=$(uci -q get rtp2httpd.$n.enabled)
+		[ -n "$OUT" ] && OUT="$OUT,"
+		OUT="$OUT{\"name\":\"$n\",\"listen\":\"$L\",\"upstream\":\"$U\",\"workers\":\"$W\",\"enabled\":\"$EN\"}"
+	done
+	json "{\"ok\":true,\"items\":[$OUT]}"
+	;;
+
+diag)
+	K=$(field kind)
+	T=$(field target | sed 's/[^A-Za-z0-9.:_-]//g')
+	PN=$(field port | sed 's/[^0-9]//g')
+	[ -n "$T" ] || err "target required"
+	text
+	echo "# $K $T ${PN:+port $PN}"
+	echo
+	case "$K" in
+		ping) timeout 10 ping -c 4 -W 2 "$T" 2>&1 ;;
+		trace)
+			if command -v traceroute >/dev/null 2>&1; then
+				timeout 20 traceroute -m 8 -w 1 -q 1 "$T" 2>&1
+			else
+				echo "系统未安装 traceroute"
+			fi
+			;;
+		dns)
+			if command -v nslookup >/dev/null 2>&1; then
+				timeout 10 nslookup "$T" 2>&1
+			else
+				echo "系统未安装 nslookup"
+			fi
+			;;
+		port)
+			[ -n "$PN" ] || { echo "请填写端口"; exit 0; }
+			if timeout 5 nc -z -w 2 "$T" "$PN" 2>&1; then
+				echo "端口 $PN 开放"
+			else
+				echo "端口 $PN 不通"
+			fi
+			;;
+		*) echo "未知类型" ;;
+	esac
+	exit 0
+	;;
+
+firewall)
+	OUT=""
+	for n in $(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\([A-Za-z0-9_]*\)=rule$/\1/p"); do
+		NAME=$(uci -q get firewall.$n.name)
+		SRC=$(uci -q get firewall.$n.src)
+		DP=$(uci -q get firewall.$n.dest_port)
+		PR=$(uci -q get firewall.$n.proto)
+		TG=$(uci -q get firewall.$n.target)
+		EN=$(uci -q get firewall.$n.enabled)
+		[ -z "$EN" ] && EN=1
+		[ -n "$OUT" ] && OUT="$OUT,"
+		OUT="$OUT{\"id\":\"$n\",\"name\":\"$NAME\",\"src\":\"$SRC\",\"port\":\"$DP\",\"proto\":\"$PR\",\"target\":\"$TG\",\"enabled\":$EN}"
+	done
+	json "{\"ok\":true,\"items\":[$OUT]}"
+	;;
+
+fw_toggle)
+	ID=$(field id | sed 's/[^A-Za-z0-9_]//g')
+	[ -n "$ID" ] || err "id required"
+	EN=$(field enabled)
+	if [ "$EN" = "true" ]; then uci -q set firewall.$ID.enabled='1'; else uci -q set firewall.$ID.enabled='0'; fi
+	uci -q commit firewall
+	( sleep 1; /etc/init.d/firewall reload ) >/dev/null 2>&1 &
+	json '{"ok":true}'
+	;;
+
+fw_del)
+	ID=$(field id | sed 's/[^A-Za-z0-9_]//g')
+	[ -n "$ID" ] || err "id required"
+	uci -q delete firewall.$ID
+	uci -q commit firewall
+	( sleep 1; /etc/init.d/firewall reload ) >/dev/null 2>&1 &
+	json '{"ok":true}'
+	;;
+
+fw_add)
+	NAME=$(field name | sed 's/["\\]//g')
+	PORT=$(field port | sed 's/[^0-9 -]//g')
+	PR=$(field proto)
+	[ -n "$PORT" ] || err "port required"
+	[ -n "$NAME" ] || NAME="panel-rule"
+	uci -q add firewall rule >/dev/null
+	ID=$(uci show firewall | sed -n 's/^firewall\.\([A-Za-z0-9_]*\)=rule$/\1/p' | tail -1)
+	uci -q set firewall.$ID.name="$NAME"
+	uci -q set firewall.$ID.src='wan'
+	uci -q set firewall.$ID.proto="$PR"
+	uci -q set firewall.$ID.dest_port="$PORT"
+	uci -q set firewall.$ID.target='ACCEPT'
+	uci -q commit firewall
+	( sleep 1; /etc/init.d/firewall reload ) >/dev/null 2>&1 &
+	json '{"ok":true}'
+	;;
+
+backup)
+	sysupgrade -b /tmp/panel-backup.tar.gz >/dev/null 2>&1
+	printf 'Content-Type: application/gzip\r\nContent-Disposition: attachment; filename="iptv-panel-backup.tar.gz"\r\nCache-Control: no-store\r\n\r\n'
+	cat /tmp/panel-backup.tar.gz
+	exit 0
+	;;
+
+reboot)
+	( sleep 1; reboot ) >/dev/null 2>&1 &
+	json '{"ok":true}'
+	;;
+
+*)
+	err "unknown action"
+	;;
+esac

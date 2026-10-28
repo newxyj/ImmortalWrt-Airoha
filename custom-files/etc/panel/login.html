@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IPTV 管理面板</title>
+<style>
+:root{--bg:#0b1020;--card:#141c2f;--line:#22304d;--text:#e8eeff;--muted:#8ea2c6;--acc:#3b82f6;--bad:#ff6b6b}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 18%,#14213c 0%,#070b14 62%);color:var(--text);font:14px/1.5 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+.box{width:380px;max-width:90vw;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:28px 28px 22px;box-shadow:0 24px 70px rgba(0,0,0,.55)}
+.logo{width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,#3b82f6,#6366f1);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;box-shadow:0 8px 24px rgba(59,130,246,.35)}
+h1{font-size:20px;font-weight:700;text-align:center;margin:0 0 6px;color:#fff}
+.sub{text-align:center;color:var(--muted);font-size:12px;margin:0 0 18px}
+label{display:block;font-size:12px;color:var(--muted);margin:12px 0 6px}
+input{width:100%;background:#0a0f1c;color:var(--text);border:1px solid var(--line);border-radius:9px;padding:11px 12px;font-size:14px;outline:none}
+input:focus{border-color:var(--acc)}
+button{width:100%;margin-top:20px;padding:11px 18px;background:var(--acc);color:#fff;border:0;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer}
+button:hover{background:#2f74e8}
+button:active{transform:translateY(1px)}
+button[disabled]{opacity:.6;cursor:default}
+.err{color:var(--bad);font-size:12px;min-height:16px;margin-top:10px;text-align:center}
+.forgot{text-align:center;color:var(--muted);font-size:12px;margin-top:12px;cursor:pointer}
+.forgot:hover{color:var(--acc)}
+.hide{display:none}
+</style>
+</head>
+<body>
+<div class="box">
+	<div class="logo">
+		<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+	</div>
+
+	<div id="login-view">
+		<h1>IPTV 管理面板</h1>
+		<p class="sub">请登录后管理你的设备</p>
+		<label>用户名</label>
+		<input id="u" type="text" value="admin" autocomplete="username" spellcheck="false">
+		<label>密码</label>
+		<input id="p" type="password" placeholder="请输入密码" autocomplete="current-password">
+		<button id="btn-login">登录</button>
+		<div class="err" id="err-login"></div>
+		<div class="forgot" id="forgot">忘记密码？</div>
+	</div>
+
+	<div id="change-view" class="hide">
+		<h1>首次登录</h1>
+		<p class="sub">请设置一个新的管理密码（至少 6 位）</p>
+		<label>新密码</label>
+		<input id="np1" type="password" placeholder="新密码" autocomplete="new-password">
+		<label>确认新密码</label>
+		<input id="np2" type="password" placeholder="再次输入" autocomplete="new-password">
+		<button id="btn-change">保存并进入</button>
+		<div class="err" id="err-change"></div>
+	</div>
+</div>
+
+<script>
+'use strict';
+const $ = (s) => document.querySelector(s);
+
+function show(id) {
+	$('#login-view').classList.toggle('hide', id !== 'login');
+	$('#change-view').classList.toggle('hide', id !== 'change');
+	if (id === 'change') $('#np1').focus();
+}
+
+async function post(action, body) {
+	const r = await fetch('?action=' + action, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(body)
+	});
+	return r.json();
+}
+
+$('#btn-login').addEventListener('click', async () => {
+	$('#err-login').textContent = '';
+	$('#btn-login').disabled = true;
+	try {
+		const d = await post('login', { username: $('#u').value.trim(), password: $('#p').value });
+		if (!d.ok) {
+			$('#err-login').textContent = d.error || '用户名或密码错误';
+			return;
+		}
+		if (d.must_change) {
+			show('change');
+			return;
+		}
+		location.reload();
+	}
+	catch (e) {
+		$('#err-login').textContent = '登录失败';
+	}
+	finally {
+		$('#btn-login').disabled = false;
+	}
+});
+
+$('#p').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btn-login').click(); });
+
+$('#btn-change').addEventListener('click', async () => {
+	const a = $('#np1').value;
+	const b = $('#np2').value;
+	$('#err-change').textContent = '';
+	if (a.length < 6) { $('#err-change').textContent = '密码至少 6 位'; return; }
+	if (a !== b) { $('#err-change').textContent = '两次输入不一致'; return; }
+	$('#btn-change').disabled = true;
+	try {
+		const d = await post('passwd', { password: a });
+		if (!d.ok) {
+			$('#err-change').textContent = d.error || '修改失败';
+			return;
+		}
+		location.reload();
+	}
+	catch (e) {
+		$('#err-change').textContent = '修改失败';
+	}
+	finally {
+		$('#btn-change').disabled = false;
+	}
+});
+
+$('#forgot').addEventListener('click', () => {
+	alert('忘记密码：用 SSH 登录设备后执行\n\npanel-passwd 新密码');
+});
+
+(async () => {
+	try {
+		const r = await fetch('?action=check');
+		const d = await r.json();
+		if (d.ok && d.must_change) { show('change'); return; }
+		if (d.ok) { location.reload(); return; }
+	}
+	catch (e) {}
+	show('login');
+	$('#p').focus();
+})();
+</script>
+</body>
+</html>

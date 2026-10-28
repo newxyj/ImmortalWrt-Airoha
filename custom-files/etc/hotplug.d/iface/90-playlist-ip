@@ -1,0 +1,4 @@
+#!/bin/sh
+[ "$ACTION" = "ifup" ] || exit 0
+[ "$INTERFACE" = "wan" ] || exit 0
+/usr/bin/playlist-render

@@ -1,0 +1,5 @@
+#!/bin/sh
+# 首次启动：启用 rtp2httpd，并确保面板相关文件权限正确
+/etc/init.d/rtp2httpd enable 2>/dev/null
+chmod 755 /www/cgi-bin/panel /usr/bin/iptv-mode /usr/bin/playlist-sync /usr/bin/panel-passwd 2>/dev/null
+exit 0

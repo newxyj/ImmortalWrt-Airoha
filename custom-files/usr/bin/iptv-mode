@@ -1,0 +1,159 @@
+#!/bin/sh
+# 切换 IPTV 网络模式：bridge（三口干一个桥，单实例 5000）
+#                   split （三口各自独立，三个实例 5000/5001/5002）
+MODE="$1"
+
+case "$MODE" in
+bridge|split) ;;
+*) echo "usage: iptv-mode bridge|split"; exit 1 ;;
+esac
+
+if [ "$MODE" = "bridge" ]; then
+	cat > /etc/config/network <<'EOF'
+config interface 'loopback'
+	option device 'lo'
+	option proto 'static'
+	list ipaddr '127.0.0.1/8'
+
+config globals 'globals'
+
+config interface 'lan'
+	option device 'lan1.1'
+	option proto 'static'
+	option ip6assign '60'
+	option netmask '255.255.255.0'
+	list ipaddr '10.1.1.1'
+
+config interface 'wan6'
+	option proto 'dhcpv6'
+	option device 'lan1'
+	option norelease '1'
+
+config interface 'wan'
+	option proto 'dhcp'
+	option device 'lan1'
+
+config device 'br_lan_iptv'
+	option name 'br-iptv'
+	option type 'bridge'
+	option vlan_filtering '1'
+	list ports 'lan2'
+	list ports 'lan3'
+	list ports 'lan4'
+
+config bridge-vlan 'br_iptv_v1'
+	option device 'br-iptv'
+	option vlan '1'
+	list ports 'lan2:u*'
+	list ports 'lan3:u*'
+	list ports 'lan4:u*'
+
+config device 'br_iptv_u1'
+	option name 'br-iptv.1'
+	option type '8021q'
+	option ifname 'br-iptv'
+	option vid '1'
+
+config interface 'br_iptv'
+	option device 'br-iptv.1'
+	option proto 'static'
+	option netmask '255.255.255.0'
+	option ipaddr '10.10.10.1/24'
+EOF
+	cat > /etc/config/rtp2httpd <<'EOF'
+config instance 'line1'
+	option enabled '1'
+	list listen '0.0.0.0:5000'
+	list listen '[::]:5000'
+	option upstream_interface 'br-iptv.1'
+	option workers '4'
+	option external_m3u 'file:///etc/rtp2httpd/playlist1.m3u'
+	option external_m3u_update_interval '0'
+EOF
+	uci -q delete firewall.iptv.network
+	uci add_list firewall.iptv.network='br_iptv'
+else
+	cat > /etc/config/network <<'EOF'
+config interface 'loopback'
+	option device 'lo'
+	option proto 'static'
+	list ipaddr '127.0.0.1/8'
+
+config globals 'globals'
+
+config interface 'lan'
+	option device 'lan1.1'
+	option proto 'static'
+	option ip6assign '60'
+	option netmask '255.255.255.0'
+	list ipaddr '10.1.1.1'
+
+config interface 'wan6'
+	option proto 'dhcpv6'
+	option device 'lan1'
+	option norelease '1'
+
+config interface 'wan'
+	option proto 'dhcp'
+	option device 'lan1'
+
+config interface 'iptv1'
+	option proto 'static'
+	option device 'lan2'
+	list ipaddr '10.10.10.1/24'
+
+config interface 'iptv2'
+	option proto 'static'
+	option device 'lan3'
+	list ipaddr '10.10.11.1/24'
+
+config interface 'iptv3'
+	option proto 'static'
+	option device 'lan4'
+	list ipaddr '10.10.12.1/24'
+EOF
+	cat > /etc/config/rtp2httpd <<'EOF'
+config instance 'line1'
+	option enabled '1'
+	list listen '0.0.0.0:5000'
+	list listen '[::]:5000'
+	option upstream_interface 'lan2'
+	option workers '2'
+	option external_m3u 'file:///etc/rtp2httpd/playlist1.m3u'
+	option external_m3u_update_interval '0'
+
+config instance 'line2'
+	option enabled '1'
+	list listen '0.0.0.0:5001'
+	list listen '[::]:5001'
+	option upstream_interface 'lan3'
+	option workers '2'
+	option external_m3u 'file:///etc/rtp2httpd/playlist2.m3u'
+	option external_m3u_update_interval '0'
+
+config instance 'line3'
+	option enabled '1'
+	list listen '0.0.0.0:5002'
+	list listen '[::]:5002'
+	option upstream_interface 'lan4'
+	option workers '2'
+	option external_m3u 'file:///etc/rtp2httpd/playlist3.m3u'
+	option external_m3u_update_interval '0'
+EOF
+	uci -q delete firewall.iptv.network
+	uci add_list firewall.iptv.network='iptv1'
+	uci add_list firewall.iptv.network='iptv2'
+	uci add_list firewall.iptv.network='iptv3'
+fi
+
+uci -q delete firewall.iptv6.network 2>/dev/null || true
+
+uci commit network
+uci commit firewall
+uci commit rtp2httpd
+
+/etc/init.d/network reload
+/etc/init.d/firewall reload
+/etc/init.d/rtp2httpd restart
+
+echo "$MODE"

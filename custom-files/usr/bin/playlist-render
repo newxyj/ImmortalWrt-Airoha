@@ -1,0 +1,6 @@
+#!/bin/sh
+# 把播放列表里的主机地址替换为本机 WAN 地址
+IP=$(ip -4 -o addr show dev lan1 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)
+[ -n "$IP" ] || exit 0
+sed -i "s|__HOST__|$IP|g; s|http://[0-9][0-9.]*:5000|http://$IP:5000|g" /www/playlist.txt
+exit 0
